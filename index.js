@@ -56,26 +56,34 @@ _.each(config.XboxGamerTags, function(gamerTag){
                                                     return e.player.destinyUserInfo.displayName;
                                                 });
                                                 _.each(gamerTags, function(gt){
-                                                    //console.log(guardianTheaterApiEndpoint + gt + "/" + activityId);
                                                     request(guardianTheaterApiEndpoint + gt + "/" + activityId, function (error, response, body) {
+                                                    //console.log(guardianTheaterApiEndpoint + gt + "/" + activityId);
                                                       if (!error && response.statusCode == 200) {
                                                         var clips = JSON.parse(body);
                                                         if (clips.length){
-                                                            console.log(JSON.stringify(clips, null, 2));
+                                                            //console.log(JSON.stringify(clips, null, 2));
                                                             _.each(clips, function(clip){
-                                                                var clipUrl = clip.gameClipUris.uri;
+                                                                //fs.writeFileSync("./clip.json", JSON.stringify(clip));
+                                                                var clipUrl = clip.gameClipUris[0].uri;
+                                                                var description = 'Game Clip by ' + gt + ' recorded ' + moment(clip.dateRecorded).fromNow();
                                                                 slack.send({
-                                                                  text: 'Game Clip by ' + gt + ' recorded at ' + moment(clip.dateRecorded).fromNow(),
+                                                                  text: description,
                                                                   attachments: [
                                                                     {
-                                                                      fallback: 'Required Fallback String',
+                                                                      title: "Watch Now",
+                                                                      title_link: clipUrl,
+                                                                      image_url: clip.thumbnails[0].uri,
+                                                                      thumb_url: clip.thumbnails[1].uri,                                                                    
+                                                                      fallback: description,
+                                                                      color: 'good',
                                                                       fields: [
-                                                                        { title: 'Game Clip', value: clipUrl, short: true },
-                                                                        { title: 'Record At', value: moment(clip.dateRecorded).format('MMMM Do YYYY, h:mm:ss a'), short: true }
+                                                                        { title: 'GamerTag', value: gt, short: true },
+                                                                        { title: 'Record At', value: moment(clip.dateRecorded).format('MMMM Do, h:mm a'), short: true }
                                                                       ]
                                                                     }
                                                                   ]
                                                                 });
+                                                                console.log("sent clip");
                                                             });
                                                         }
                                                       }
