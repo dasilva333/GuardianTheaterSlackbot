@@ -1,0 +1,29 @@
+{
+  "name": "guardiantheater-slackbot",
+  "version": "1.0.0",
+  "description": "Automatically posts new clips found for the configured username(s)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dasilva333/GuardianTheaterSlackbot.git"
+  },
+  "author": "Richard Pinedo",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dasilva333/GuardianTheaterSlackbot/issues"
+  },
+  "homepage": "https://github.com/dasilva333/GuardianTheaterSlackbot#readme",
+  "dependencies": {
+    "destiny-client": "^0.5.2",
+    "lodash": "^4.15.0",
+    "moment": "^2.14.1",
+    "request": "^2.74.0",
+    "slack-notify": "^0.1.6"
+  },
+  "devDependencies": {
+    "babel-preset-es2015": "^6.14.0"
+  }
+}
