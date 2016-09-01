@@ -8,15 +8,18 @@ var destiny = require("destiny-client").default("5cae9cdee67a42848025223b4e61f92
 
 /* Define Variables */
 var configFile = ".\\config.json";
+/* This endpoint provides all the clips for a user given the activity id */
 var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActivity/";
-var config = JSON.parse(fs.readFileSync(configFile));
-slack = slack(config.SlackWebhook);
 /* 10 Minute Cache on Guardian.Theater data */
 var guardianTheaterTTL = 10;
+
+var config = JSON.parse(fs.readFileSync(configFile));
 var serverStartTime = moment();
 var accounts = [];
 var activitiesMonitored = [];
 var gamerTagsMonitored = [];
+
+slack = slack(config.SlackWebhook);
 
 function queryAccountsInfo(cb){
     console.log("queryAccountsInfo");
@@ -54,6 +57,7 @@ function queryActivityHistory(cb){
     _.each(accounts, function(account){
         var count = 0;
         _.each(account.characters, function(characterId){
+            /* This query provides all the activityIds within a given time frame */
             destiny
                 .ActivityHistory({
                     membershipType: account.membershipType,
@@ -95,6 +99,7 @@ function queryActivityCarnage(cb){
     } else {
         var activityCount = 0;
          _.each(activitiesMonitored, function(activity){
+            /* This query provides the information as to who was playing in a given activityId */
             destiny
                 .CarnageReport({
                     activityId: activity.activityId
@@ -112,6 +117,9 @@ function queryActivityCarnage(cb){
     }
 }
 
+/* At this point we have an activity object, each object has an id for the activity and the gamerTags in the activity,
+   All that's left is to pass this info to Guardian.theater and figure out if any players recorded any clips for that activity 
+*/
 function queryGameClips(cb){
     console.log("queryGameClips");
     var activitiesCount = 1, activeActivities = _.clone(activitiesMonitored);
