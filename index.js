@@ -51,7 +51,11 @@ function queryAccountsInfo(cb){
     });
 }
 
-function queryActivityHistory(cb){
+function delayedQueryHistory(){
+    setTimeout(queryActivityHistory, (guardianTheaterTTL / 2) * 60 * 1000);
+}
+
+function queryActivityHistory(){
     console.log("queryActivityHistory");
     carnageCount = 0;
     _.each(accounts, function(account){
@@ -77,7 +81,7 @@ function queryActivityHistory(cb){
                     if ( count == account.characters.length ){
                         carnageCount++;
                         if ( carnageCount == accounts.length ){
-                            queryActivityCarnage(cb);
+                            queryActivityCarnage();
                         }                        
                     }
                 });
@@ -85,7 +89,7 @@ function queryActivityHistory(cb){
     });
 }
 
-function queryActivityCarnage(cb){
+function queryActivityCarnage(){
     console.log("queryActivityCarnage");
     activitiesMonitored = _.map(_.uniq(activitiesMonitored), function(activityId){
         return {
@@ -95,7 +99,7 @@ function queryActivityCarnage(cb){
     });
     if ( activitiesMonitored.length == 0 ){
         console.log("no activities found, waiting...");
-        cb();
+        delayedQueryHistory();
     } else {
         var activityCount = 0;
          _.each(activitiesMonitored, function(activity){
@@ -110,7 +114,7 @@ function queryActivityCarnage(cb){
                         return e.player.destinyUserInfo.displayName;
                     });
                     if ( activitiesMonitored.length == activityCount ){
-                        queryGameClips(cb);
+                        queryGameClips();
                     }
                 });
         });        
@@ -120,7 +124,7 @@ function queryActivityCarnage(cb){
 /* At this point we have an activity object, each object has an id for the activity and the gamerTags in the activity,
    All that's left is to pass this info to Guardian.theater and figure out if any players recorded any clips for that activity 
 */
-function queryGameClips(cb){
+function queryGameClips(){
     console.log("queryGameClips");
     var activitiesCount = 1, activeActivities = _.clone(activitiesMonitored);
     function nextActivity(){
@@ -162,8 +166,9 @@ function queryGameClips(cb){
                 //console.log(activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
                 console.log("finish", activitiesCount, activitiesMonitored.length);
                 if ( activitiesCount == activitiesMonitored.length && activity.gamerTags.length == gamerTagCount ){
-                    console.log("cb");
-                    cb();        
+                    /* Check every 5 minutes instead of 10 to account for any timing mismatch */
+                    console.log("waiting 5 minutes to check history again");
+                    delayedQueryHistory();
                 }
                 else if ( activity.gamerTags.length == gamerTagCount ){
                     activitiesCount++;
@@ -176,8 +181,5 @@ function queryGameClips(cb){
 }
 
 queryAccountsInfo(function(){
-   queryActivityHistory(function(){
-        /* Check every 5 minutes instead of 10 to account for any timing mismatch */
-        setTimeout(queryActivityHistory, (guardianTheaterTTL / 2) * 60 * 1000);
-   });
+   queryActivityHistory();
 });
