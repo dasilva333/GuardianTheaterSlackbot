@@ -22,6 +22,7 @@ var gamerTagsMonitored = [];
 
 slack = slack(config.SlackWebhook);
 
+/* Define Functions */
 function queryAccountsInfo(cb){
     console.log("queryAccountsInfo");
     _.each(config.XboxGamerTags, function(gamerTag){
@@ -181,6 +182,7 @@ function queryGameClips(){
     nextActivity();
 }
 
+/* start the monitoring process */
 queryAccountsInfo(function(){
    queryActivityHistory();
 });
