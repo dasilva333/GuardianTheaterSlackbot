@@ -42,7 +42,7 @@ function queryAccountsInfo(cb){
                         if ( config.XboxGamerTags.length == accounts.length ){ cb(); }
                     })
             } else {
-                throw Error("Invalid Xbox Gamertag Provided");
+                console.log("Invalid Xbox Gamertag Provided", gamerTag);
             }
         })
     });
@@ -63,8 +63,9 @@ function queryActivityHistory(cb){
                 })
                 .then(res => { 
                     count++;
+                    /* Eligble activities are defined as any match played in the last 20 minutes (twice the TTL cache time) */
                     var eligbleActivities = _.map(_.filter(res.activities, function(activity){
-                        return serverStartTime.diff(moment(activity.period),'minutes') <= 500;
+                        return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 2);
                     }), function(activity){
                         return activity.activityDetails.instanceId;
                     });
@@ -88,22 +89,27 @@ function queryActivityCarnage(cb){
             gamerTags: []
         }
     });
-    var activityCount = 0;
-     _.each(activitiesMonitored, function(activity){
-        destiny
-            .CarnageReport({
-                activityId: activity.activityId
-            })
-            .then(res => {
-                activityCount++;
-                activity.gamerTags = _.map(res.entries, function(e){
-                    return e.player.destinyUserInfo.displayName;
+    if ( activitiesMonitored.length == 0 ){
+        console.log("no activities found, waiting...");
+        cb();
+    } else {
+        var activityCount = 0;
+         _.each(activitiesMonitored, function(activity){
+            destiny
+                .CarnageReport({
+                    activityId: activity.activityId
+                })
+                .then(res => {
+                    activityCount++;
+                    activity.gamerTags = _.map(res.entries, function(e){
+                        return e.player.destinyUserInfo.displayName;
+                    });
+                    if ( activitiesMonitored.length == activityCount ){
+                        queryGameClips(cb);
+                    }
                 });
-                if ( activitiesMonitored.length == activityCount ){
-                    queryGameClips(cb);
-                }
-            });
-    });    
+        });        
+    }
 }
 
 function queryGameClips(cb){
@@ -163,6 +169,7 @@ function queryGameClips(cb){
 
 queryAccountsInfo(function(){
    queryActivityHistory(function(){
-        setTimeout(queryActivityHistory, guardianTheaterTTL * 60 * 1000);
+        /* Check every 5 minutes instead of 10 to account for any timing mismatch */
+        setTimeout(queryActivityHistory, (guardianTheaterTTL / 2) * 60 * 1000);
    });
 });
