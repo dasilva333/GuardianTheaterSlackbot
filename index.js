@@ -14,6 +14,7 @@ var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActi
 var guardianTheaterTTL = 10;
 
 var config = JSON.parse(fs.readFileSync(configFile));
+config.XboxGamerTags = _.map(config.XboxGamerTags, function(gt){ return gt.toLowerCase(); });
 var serverStartTime = moment();
 var accounts = [];
 var activitiesMonitored = [];
@@ -62,6 +63,7 @@ function queryActivityHistory(){
         var count = 0;
         _.each(account.characters, function(characterId){
             /* This query provides all the activityIds within a given time frame */
+            console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
             destiny
                 .ActivityHistory({
                     membershipType: account.membershipType,
@@ -73,7 +75,7 @@ function queryActivityHistory(){
                     count++;
                     /* Eligble activities are defined as any match played in the last 20 minutes (twice the TTL cache time) */
                     var eligbleActivities = _.map(_.filter(res.activities, function(activity){
-                        return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 2);
+                        return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 6);
                     }), function(activity){
                         return activity.activityDetails.instanceId;
                     });
@@ -130,11 +132,10 @@ function queryGameClips(){
     function nextActivity(){
         var activity = activeActivities.pop();
         var gamerTagCount = 0;
-        console.log("new activity", gamerTagCount);
+        console.log(activity.activityId," found activity for ", _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags));
         _.each(activity.gamerTags, function(gamerTag){
             var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
             request(guardianTheaterURL, function (error, response, body) {
-                //console.log(guardianTheaterURL);
                 gamerTagCount++;
                 if (!error && response.statusCode == 200) {
                     var clips = JSON.parse(body);
@@ -164,7 +165,7 @@ function queryGameClips(){
                     }
                 }
                 //console.log(activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
-                console.log("finish", activitiesCount, activitiesMonitored.length);
+                //console.log("finish", activitiesCount, activitiesMonitored.length);
                 if ( activitiesCount == activitiesMonitored.length && activity.gamerTags.length == gamerTagCount ){
                     /* Check every 5 minutes instead of 10 to account for any timing mismatch */
                     console.log("waiting 5 minutes to check history again");
