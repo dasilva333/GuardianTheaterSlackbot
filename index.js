@@ -8,6 +8,7 @@ var destiny = require("destiny-client").default("5cae9cdee67a42848025223b4e61f92
 
 /* Define Variables */
 var configFile = ".\\config.json";
+var notifiedFilePath = ".\\notified.json";
 /* This endpoint provides all the clips for a user given the activity id */
 var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActivity/";
 /* 10 Minute Cache on Guardian.Theater data */
@@ -19,7 +20,10 @@ var serverStartTime = moment();
 var accounts = [];
 var activitiesMonitored = [];
 var gamerTagsMonitored = [];
-
+var clipsNotified = [];
+if (fs.existsSync(notifiedFilePath)){
+	clipsNotified = JSON.parse(fs.readFileSync(notifiedFilePath));
+}
 slack = slack(config.SlackWebhook);
 
 /* Define Functions */
@@ -46,10 +50,16 @@ function queryAccountsInfo(cb){
                         accounts.push(account);
                         if ( config.XboxGamerTags.length == accounts.length ){ cb(); }
                     })
+					.catch(function(){
+						console.log("error:", e);
+					});
             } else {
                 console.log("Invalid Xbox Gamertag Provided", gamerTag);
             }
         })
+		.catch(function(){
+			console.log("error:", e);
+		});
     });
 }
 
@@ -87,7 +97,10 @@ function queryActivityHistory(){
                             queryActivityCarnage();
                         }                        
                     }
-                });
+                })
+				.catch(function(){
+					console.log("error:", e);
+				});
         });
     });
 }
@@ -119,7 +132,10 @@ function queryActivityCarnage(){
                     if ( activitiesMonitored.length == activityCount ){
                         queryGameClips();
                     }
-                });
+                })
+				.catch(function(){
+					console.log("error:", e);
+				});
         });        
     }
 }
@@ -132,8 +148,9 @@ function queryGameClips(){
     var activitiesCount = 1, activeActivities = _.clone(activitiesMonitored);
     function nextActivity(){
         var activity = activeActivities.pop();
+		activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);
         var gamerTagCount = 0;
-        console.log(activity.activityId," found activity for ", _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags));
+        console.log(activity.activityId," found activity for ", activity.intersection);
         _.each(activity.gamerTags, function(gamerTag){
             var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
             request(guardianTheaterURL, function (error, response, body) {
@@ -142,26 +159,35 @@ function queryGameClips(){
                     var clips = JSON.parse(body);
                     if (clips.length){
                         _.each(clips, function(clip){
-                            var clipUrl = clip.gameClipUris[0].uri;
-                            var description = 'Game Clip by ' + gamerTag + ' recorded ' + moment(clip.dateRecorded).fromNow();
-                            slack.send({
-                              text: description,
-                              attachments: [
-                                {
-                                  title: "Watch Now",
-                                  title_link: clipUrl,
-                                  image_url: clip.thumbnails[0].uri,
-                                  thumb_url: clip.thumbnails[1].uri,                                                                    
-                                  fallback: description,
-                                  color: 'good',
-                                  fields: [
-                                    { title: 'GamerTag', value: gamerTag, short: true },
-                                    { title: 'Record At', value: moment(clip.dateRecorded).format('MMMM Do, h:mm a'), short: true }
-                                  ]
-                                }
-                              ]
-                            });
-                            console.log("notification sent to slack for " + gamerTag);
+							if ( clipsNotified.indexOf(clip.gameClipId) == -1 ){
+								var clipUrl = clip.gameClipUris[0].uri;
+								clipsNotified.push(clip.gameClipId);
+								fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
+								var description = 'Game Clip by ' + gamerTag + ' recorded ' + moment(clip.dateRecorded).fromNow();
+								slack.send({
+								  text: description,
+								  icon_url: "http://guardian.theater/public/images/travelereel.png",
+								  username: "GuardianTheaterBot",							  
+								  attachments: [
+									{
+									  title: "Watch Now",
+									  title_link: clipUrl,
+									  image_url: clip.thumbnails[0].uri,
+									  thumb_url: clip.thumbnails[1].uri,                                                                    
+									  fallback: description,
+									  color: 'good',
+									  fields: [
+										{ title: 'Recorded By', value: gamerTag, short: true },
+										{ title: 'In Activity', value: activity.intersection.join(", "), short: true },
+										{ title: 'Record At', value: moment(clip.dateRecorded).format('MMMM Do, h:mm a'), short: true }
+									  ]
+									}
+								  ]
+								});
+								console.log("notification sent to slack for " + gamerTag);								
+							} else {
+								console.log("skipping video already notified")
+							}
                         });
                     }
                 }
