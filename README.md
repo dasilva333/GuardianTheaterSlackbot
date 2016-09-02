@@ -1,5 +1,7 @@
 # GuardianTheaterSlackbot
 
+Automatically receive notifications on Slack for subscribed Xbox gamertags having recorded a video game clip in the same activity as you.
+
 ## Preview
 
 ![Slack Preview](preview.png)
