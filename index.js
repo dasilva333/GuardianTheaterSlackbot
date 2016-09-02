@@ -5,7 +5,7 @@ var request = require('request');
 var slack = require("slack-notify");
 var moment = require("moment");
 var destiny = require("destiny-client").default("5cae9cdee67a42848025223b4e61f929");
-
+var express = require("express");
 /* Define Variables */
 var configFile = "config.json";
 var notifiedFilePath = "notified.json";
@@ -29,6 +29,7 @@ slack = slack(config.SlackWebhook);
 /* Define Functions */
 function queryAccountsInfo(cb){
     console.log("queryAccountsInfo");
+    accounts = [];
     _.each(config.XboxGamerTags, function(gamerTag){
         destiny
           .Search({
@@ -48,7 +49,7 @@ function queryAccountsInfo(cb){
                             return c.characterBase.characterId;
                         });
                         accounts.push(account);
-                        if ( config.XboxGamerTags.length == accounts.length ){ cb(); }
+                        if ( config.XboxGamerTags.length == accounts.length ){ if (cb) cb(); }
                     })
 					.catch(function(){
 						console.log("error:", e);
@@ -235,4 +236,47 @@ function queryGameClips(){
 /* start the monitoring process */
 queryAccountsInfo(function(){
    queryActivityHistory();
+});
+
+var app = express();
+
+app.get('/listgamers', function (req, res) {
+  res.send("GuardianBot is currently configured to monitor " + config.XboxGamerTags.join(", "));
+});
+
+app.get('/addgamer/*', function (req, res) {
+  var gamertag = req.params[0].toLowerCase();
+  if ( gamertag ){  
+      var index = config.XboxGamerTags.indexOf(gamertag);
+      if ( index > -1 ){
+          res.send("Gamer already part of the list; " + config.XboxGamerTags.join(", "));
+      } else {
+          config.XboxGamerTags.push(gamertag);
+          queryAccountsInfo();
+          fs.writeFileSync(configFile, JSON.stringify(config));
+          res.send("GuardianBot added " + gamertag + " to the list of monitored accounts; " + config.XboxGamerTags.join(", "));
+      }     
+  } else {
+    res.send(500);
+  }
+});
+
+app.get('/removegamer/*', function (req, res) {
+  var gamertag = req.params[0].toLowerCase();
+  if ( gamertag ){  
+      var index = config.XboxGamerTags.indexOf(gamertag);
+      if ( index > -1 ){
+          config.XboxGamerTags.splice(index, 1)  
+          fs.writeFileSync(configFile, JSON.stringify(config, null, 4));
+          res.send("GuardianBot removed " + gamertag + " from the list of monitored accounts; " + config.XboxGamerTags.join(", "));
+      } else {
+        res.send(500);
+      }      
+  } else {
+    res.send(500);
+  }
+});
+
+app.listen(1337, function () {
+  console.log('GuardianTheaterBot Helper listening on port 1337!');
 });
