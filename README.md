@@ -16,7 +16,7 @@ node index.js
 
 ## Configuration
 
-Edit the config.json file:
+Rename the config.json.example file to config.json and edit the following two fields to match your preferences:
 
 ### SlackWebhook: 
 
