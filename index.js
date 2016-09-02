@@ -18,7 +18,7 @@ var config = JSON.parse(fs.readFileSync(configFile));
 config.XboxGamerTags = _.map(config.XboxGamerTags, function(gt){ return gt.toLowerCase(); });
 var serverStartTime = moment();
 var accounts = [];
-var activitiesMonitored = [];
+var activitiesMonitored = {};
 var gamerTagsMonitored = [];
 var clipsNotified = [];
 if (fs.existsSync(notifiedFilePath)){
@@ -64,14 +64,20 @@ function queryAccountsInfo(cb){
 }
 
 function delayedQueryHistory(){
-    setTimeout(queryActivityHistory, (guardianTheaterTTL / 2) * 60 * 1000);
+	var delay = (guardianTheaterTTL / 2) * 60 * 1000;
+	console.log("waiting for delayedQueryHistory", delay);	
+    setTimeout(function(){
+		console.log("next queryActivityHistory");
+		queryActivityHistory();
+	}, delay);
 }
 
 function queryActivityHistory(){
-    console.log("queryActivityHistory");
-    carnageCount = 0;
-    _.each(accounts, function(account){
-        var count = 0;
+	var accountIndex = 0;
+	function getNextCharacterHistory(){
+		var count = 0;
+		var account = accounts[accountIndex];
+		accountIndex++;
         _.each(account.characters, function(characterId){
             /* This query provides all the activityIds within a given time frame */
             console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
@@ -83,41 +89,51 @@ function queryActivityHistory(){
                     mode: "AllPVP"
                 })
                 .then(res => { 
-                    count++;
+                    //count++;
+					console.log("activityhistory", count);
                     /* Eligble activities are defined as any match played in the last 20 minutes (twice the TTL cache time) */
-                    var eligbleActivities = _.map(_.filter(res.activities, function(activity){
-                        return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 6);
+                    _.each(_.filter(res.activities, function(activity){
+                        return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 2);
                     }), function(activity){
-                        return activity.activityDetails.instanceId;
-                    });
-                    activitiesMonitored = activitiesMonitored.concat(eligbleActivities);
-                    if ( count == account.characters.length ){
+						var activityId = activity.activityDetails.instanceId;
+                        activitiesMonitored[activityId] = {
+							activityId: activityId,
+							gamerTags: []
+						};
+                    });                    
+					console.log("activityhistory", characterId, count == account.characters.length);
+                    /*if ( count == account.characters.length ){
                         carnageCount++;
+						console.log("carnageCount", carnageCount, accounts.length)
                         if ( carnageCount == accounts.length ){
+							console.log("ready to run queryActivityCarnage")
                             queryActivityCarnage();
                         }                        
-                    }
+                    }*/
+					if (accountIndex > accounts.length){
+						queryActivityCarnage();
+					} else {
+						getNextCharacterHistory();
+					}
                 })
 				.catch(function(){
 					console.log("error:", e);
 				});
         });
-    });
+	}
+    console.log("queryActivityHistory");
+    //carnageCount = 0;
+	getNextCharacterHistory();
 }
 
 function queryActivityCarnage(){
     console.log("queryActivityCarnage");
-    activitiesMonitored = _.map(_.uniq(activitiesMonitored), function(activityId){
-        return {
-            activityId: activityId,
-            gamerTags: []
-        }
-    });
-    if ( activitiesMonitored.length == 0 ){
+    if ( _.keys(activitiesMonitored).length == 0 ){
         console.log("no activities found, waiting...");
         delayedQueryHistory();
     } else {
         var activityCount = 0;
+		console.log("activitiesMonitored", activitiesMonitored);
          _.each(activitiesMonitored, function(activity){
             /* This query provides the information as to who was playing in a given activityId */
             destiny
@@ -129,7 +145,7 @@ function queryActivityCarnage(){
                     activity.gamerTags = _.map(res.entries, function(e){
                         return e.player.destinyUserInfo.displayName;
                     });
-                    if ( activitiesMonitored.length == activityCount ){
+                    if ( _.keys(activitiesMonitored).length == activityCount ){
                         queryGameClips();
                     }
                 })
@@ -145,16 +161,24 @@ function queryActivityCarnage(){
 */
 function queryGameClips(){
     console.log("queryGameClips");
-    var activitiesCount = 1, activeActivities = _.clone(activitiesMonitored);
+    var activitiesCount = 1, activeActivities = _.map(activitiesMonitored);
+	console.log("activeActivities", activeActivities)
     function nextActivity(){
         var activity = activeActivities.pop();
+		console.log("activity", activity)
 		activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);
         var gamerTagCount = 0;
         console.log(activity.activityId," found activity for ", activity.intersection);
+		if ( activity.gamerTags.length == 0 ){
+			console.log("weird activity", activity)
+		}
         _.each(activity.gamerTags, function(gamerTag){
+			console.log("gamerTag", gamerTag)
             var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
+			console.log("guardianTheaterURL", guardianTheaterURL)
             request(guardianTheaterURL, function (error, response, body) {
                 gamerTagCount++;
+				console.log("gamerTagCount", gamerTagCount)
                 if (!error && response.statusCode == 200) {
                     var clips = JSON.parse(body);
                     if (clips.length){
@@ -191,9 +215,9 @@ function queryGameClips(){
                         });
                     }
                 }
-                //console.log(activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
-                //console.log("finish", activitiesCount, activitiesMonitored.length);
-                if ( activitiesCount == activitiesMonitored.length && activity.gamerTags.length == gamerTagCount ){
+                console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
+                console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
+                if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
                     /* Check every 5 minutes instead of 10 to account for any timing mismatch */
                     console.log("waiting 5 minutes to check history again");
                     delayedQueryHistory();
