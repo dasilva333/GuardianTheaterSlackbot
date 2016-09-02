@@ -1,2 +1,0 @@
-- keep track of existing notifs to not resend them again
-- improve the name/icon of the bot that posts the msg
