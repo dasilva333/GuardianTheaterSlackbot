@@ -7,8 +7,8 @@ var moment = require("moment");
 var destiny = require("destiny-client").default("5cae9cdee67a42848025223b4e61f929");
 
 /* Define Variables */
-var configFile = ".\\config.json";
-var notifiedFilePath = ".\\notified.json";
+var configFile = "config.json";
+var notifiedFilePath = "notified.json";
 /* This endpoint provides all the clips for a user given the activity id */
 var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActivity/";
 /* 10 Minute Cache on Guardian.Theater data */
