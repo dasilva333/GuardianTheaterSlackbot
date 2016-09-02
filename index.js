@@ -90,7 +90,7 @@ function queryActivityHistory(){
                 })
                 .then(res => { 
                     //count++;
-					console.log("activityhistory", count);
+					//console.log("activityhistory", count);
                     /* Eligble activities are defined as any match played in the last 20 minutes (twice the TTL cache time) */
                     _.each(_.filter(res.activities, function(activity){
                         return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 2);
@@ -101,7 +101,7 @@ function queryActivityHistory(){
 							gamerTags: []
 						};
                     });                    
-					console.log("activityhistory", characterId, count == account.characters.length);
+					//console.log("activityhistory", characterId, count == account.characters.length);
                     /*if ( count == account.characters.length ){
                         carnageCount++;
 						console.log("carnageCount", carnageCount, accounts.length)
@@ -133,7 +133,7 @@ function queryActivityCarnage(){
         delayedQueryHistory();
     } else {
         var activityCount = 0;
-		console.log("activitiesMonitored", activitiesMonitored);
+		//console.log("activitiesMonitored", activitiesMonitored);
          _.each(activitiesMonitored, function(activity){
             /* This query provides the information as to who was playing in a given activityId */
             destiny
@@ -162,23 +162,23 @@ function queryActivityCarnage(){
 function queryGameClips(){
     console.log("queryGameClips");
     var activitiesCount = 1, activeActivities = _.map(activitiesMonitored);
-	console.log("activeActivities", activeActivities)
+	//console.log("activeActivities", activeActivities)
     function nextActivity(){
         var activity = activeActivities.pop();
-		console.log("activity", activity)
+		//console.log("activity", activity)
 		activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);
         var gamerTagCount = 0;
-        console.log(activity.activityId," found activity for ", activity.intersection);
+        //console.log(activity.activityId," found activity for ", activity.intersection);
 		if ( activity.gamerTags.length == 0 ){
 			console.log("weird activity", activity)
 		}
         _.each(activity.gamerTags, function(gamerTag){
-			console.log("gamerTag", gamerTag)
+			//console.log("gamerTag", gamerTag)
             var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
 			console.log("guardianTheaterURL", guardianTheaterURL)
             request(guardianTheaterURL, function (error, response, body) {
                 gamerTagCount++;
-				console.log("gamerTagCount", gamerTagCount)
+				//console.log("gamerTagCount", gamerTagCount)
                 if (!error && response.statusCode == 200) {
                     var clips = JSON.parse(body);
                     if (clips.length){
@@ -215,8 +215,8 @@ function queryGameClips(){
                         });
                     }
                 }
-                console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
-                console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
+                //console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
+                //console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
                 if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
                     /* Check every 5 minutes instead of 10 to account for any timing mismatch */
                     console.log("waiting 5 minutes to check history again");

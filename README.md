@@ -10,13 +10,17 @@ Automatically receive notifications on Slack for subscribed Xbox gamertags havin
 
 npm install
 
+## Run the server
+
+node index.js
+
 ## Configuration
 
 Edit the config.json file:
 
 ### SlackWebhook: 
 
-From the left side menu > Apps & Intergrations > Manage > Custom Intergrations > Incoming Webhooks > Add Configuratoin
+Open Slack, in the left side menu above Customize Slack there is Apps & Intergrations > Manage > Custom Intergrations > Incoming Webhooks > Add Configuratoin.
 
 Paste the Webhook URL provided by the page into that field.
 
