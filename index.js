@@ -64,15 +64,6 @@ function queryAccountsInfo(cb){
     });
 }
 
-function delayedQueryHistory(){
-	var delay = (guardianTheaterTTL / 2) * 60 * 1000;
-	console.log("waiting for delayedQueryHistory", delay);	
-    setTimeout(function(){
-		console.log("next queryActivityHistory");
-		queryActivityHistory();
-	}, delay);
-}
-
 function queryActivityHistory(){
 	var accountIndex = 0;
 	function getNextCharacterHistory(){
@@ -131,7 +122,7 @@ function queryActivityCarnage(){
     console.log("queryActivityCarnage");
     if ( _.keys(activitiesMonitored).length == 0 ){
         console.log("no activities found, waiting...");
-        delayedQueryHistory();
+        //delayedQueryHistory();
     } else {
         var activityCount = 0;
 		//console.log("activitiesMonitored", activitiesMonitored);
@@ -221,7 +212,7 @@ function queryGameClips(){
                 if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
                     /* Check every 5 minutes instead of 10 to account for any timing mismatch */
                     console.log("waiting 5 minutes to check history again");
-                    delayedQueryHistory();
+                    //delayedQueryHistory();
                 }
                 else if ( activity.gamerTags.length == gamerTagCount ){
                     activitiesCount++;
@@ -235,7 +226,13 @@ function queryGameClips(){
 
 /* start the monitoring process */
 queryAccountsInfo(function(){
-   queryActivityHistory();
+	var delay = (guardianTheaterTTL / 2) * 60 * 1000;
+	console.log("waiting for delayedQueryHistory", delay);	
+    setInterval(function(){
+		console.log("next queryActivityHistory");
+		queryActivityHistory();
+	}, delay);
+    queryActivityHistory();
 });
 
 var app = express();
