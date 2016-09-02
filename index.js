@@ -91,9 +91,10 @@ function queryActivityHistory(){
                 .then(res => { 
                     //count++;
 					//console.log("activityhistory", count);
-                    /* Eligble activities are defined as any match played in the last 20 minutes (twice the TTL cache time) */
+                    /* Eligble activities are defined as any match played 20 minutes before the server was started */
                     _.each(_.filter(res.activities, function(activity){
-                        return serverStartTime.diff(moment(activity.period),'minutes') <= (guardianTheaterTTL * 2);
+						var diffMins = serverStartTime.diff(moment(activity.period),'minutes');
+                        return diffMins <= 20;
                     }), function(activity){
 						var activityId = activity.activityDetails.instanceId;
                         activitiesMonitored[activityId] = {
