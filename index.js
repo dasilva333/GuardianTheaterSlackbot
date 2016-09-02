@@ -184,7 +184,7 @@ function queryGameClips(){
                     if (clips.length){
                         _.each(clips, function(clip){
 							if ( clipsNotified.indexOf(clip.gameClipId) == -1 ){
-								var clipUrl = clip.gameClipUris[0].uri;
+								var clipUrl = "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + clip.gameClipId;
 								clipsNotified.push(clip.gameClipId);
 								fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
 								var description = 'Game Clip by ' + gamerTag + ' recorded ' + moment(clip.dateRecorded).fromNow();
