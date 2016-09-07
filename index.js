@@ -4,7 +4,7 @@ var _ = require("lodash");
 var request = require('request');
 var slack = require("slack-notify");
 var moment = require("moment");
-var destiny = require("destiny-client").default("5cae9cdee67a42848025223b4e61f929");
+var destiny = require("destiny-client")("5cae9cdee67a42848025223b4e61f929");
 var express = require("express");
 /* Define Variables */
 var configFile = "config.json";

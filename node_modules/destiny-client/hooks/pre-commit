@@ -1,4 +1,0 @@
-#!/bin/bash
-eslint src/
-make build
-git add .

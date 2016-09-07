@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/dasilva333/GuardianTheaterSlackbot#readme",
   "dependencies": {
+    "destiny-client": "^0.6.0",
     "express": "^4.14.0",
     "lodash": "^4.15.0",
     "moment": "^2.14.1",
