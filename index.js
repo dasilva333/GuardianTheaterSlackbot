@@ -7,16 +7,21 @@ var moment = require("moment");
 var destiny = require("destiny-client")("5cae9cdee67a42848025223b4e61f929");
 var express = require("express");
 /* Define Variables */
+var definitionsFile = "./definitions.js";
 var configFile = "config.json";
 var notifiedFilePath = "notified.json";
 /* This endpoint provides all the clips for a user given the activity id */
 var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActivity/";
 /* 10 Minute Cache on Guardian.Theater data */
 var guardianTheaterTTL = 10;
-
+/* A delay factor of 1 means the end point will be queried at the same interval at the cache timer, 2 means twice as fast */
+var delayFactor = 1;
+/* Keep track of a timestamp that refers to when a clip was last recorded */
+var gameClipLastRecorded;
 var config = JSON.parse(fs.readFileSync(configFile));
+var definitions = require(definitionsFile);
+
 config.XboxGamerTags = _.map(config.XboxGamerTags, function(gt){ return gt.toLowerCase(); });
-var serverStartTime = moment();
 var accounts = [];
 var activitiesMonitored = {};
 var gamerTagsMonitored = [];
@@ -78,19 +83,20 @@ function queryActivityHistory(){
                     membershipType: account.membershipType,
                     membershipId: account.membershipId,
                     characterId: characterId,
-                    mode: "AllPVP"
+                    mode: "None"
                 })
                 .then(res => { 
                     //count++;
 					//console.log("activityhistory", count);
-                    /* Eligble activities are defined as any match played 20 minutes before the server was started */
+                    /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
                     _.each(_.filter(res.activities, function(activity){
-						var diffMins = serverStartTime.diff(moment(activity.period),'minutes');
+						var diffMins = moment().diff(moment(activity.period),'minutes');
                         return diffMins <= 20;
                     }), function(activity){
 						var activityId = activity.activityDetails.instanceId;
                         activitiesMonitored[activityId] = {
 							activityId: activityId,
+                            mapId: activity.activityDetails.referenceId,
 							gamerTags: []
 						};
                     });                    
@@ -180,7 +186,9 @@ function queryGameClips(){
 								var clipUrl = "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + clip.gameClipId;
 								clipsNotified.push(clip.gameClipId);
 								fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
-								var description = 'Game Clip by ' + gamerTag + ' recorded ' + moment(clip.dateRecorded).fromNow();
+								var description = 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName;
+                                var gameClipRecordAt = moment(clip.dateRecorded);
+                                gameClipLastRecorded = gameClipRecordAt;
 								slack.send({
 								  text: description,
 								  icon_url: "http://guardian.theater/public/images/travelereel.png",
@@ -196,7 +204,7 @@ function queryGameClips(){
 									  fields: [
 										{ title: 'Recorded By', value: gamerTag, short: true },
 										{ title: 'In Activity', value: activity.intersection.join(", "), short: true },
-										{ title: 'Record At', value: moment(clip.dateRecorded).format('MMMM Do, h:mm a'), short: true }
+										{ title: 'Record At', value: gameClipRecordAt.format('MMMM Do, h:mm a'), short: true }
 									  ]
 									}
 								  ]
@@ -225,14 +233,25 @@ function queryGameClips(){
     nextActivity();
 }
 
-/* start the monitoring process */
-queryAccountsInfo(function(){
-	var delay = (guardianTheaterTTL / 2) * 60 * 1000;
-	console.log("waiting for delayedQueryHistory", delay);	
-    setInterval(function(){
+var monitorGameClips = function(){
+    /* The delay is set to half the cache time to ensure that the bot remains responsive and in sync during use and reverts back to full cache time wait during off time */
+	if ( gameClipLastRecorded && moment().diff(gameClipLastRecorded,'minutes') < 60 ){
+        delayFactor = 2
+    } else {
+        delayFactor = 1;
+    }
+    var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
+	console.log("waiting for delayedQueryHistory", delay, (delay / 60 / 1000), "minutes");	
+    setTimeout(function(){
 		console.log("next queryActivityHistory");
 		queryActivityHistory();
+        monitorGameClips();
 	}, delay);
+}
+
+/* start the monitoring process */
+queryAccountsInfo(function(){
+    monitorGameClips();
     queryActivityHistory();
 });
 
