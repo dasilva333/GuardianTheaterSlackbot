@@ -77,7 +77,7 @@ function queryActivityHistory(){
 		accountIndex++;
         _.each(account.characters, function(characterId){
             /* This query provides all the activityIds within a given time frame */
-            console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
+            //console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
             destiny
                 .ActivityHistory({
                     membershipType: account.membershipType,
@@ -126,9 +126,9 @@ function queryActivityHistory(){
 }
 
 function queryActivityCarnage(){
-    console.log("queryActivityCarnage");
+    //console.log("queryActivityCarnage");
     if ( _.keys(activitiesMonitored).length == 0 ){
-        console.log("no activities found, waiting...");
+        //console.log("no activities found, waiting...");
         //delayedQueryHistory();
     } else {
         var activityCount = 0;
