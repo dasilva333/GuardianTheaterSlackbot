@@ -161,7 +161,7 @@ function queryActivityCarnage(){
 function queryGameClips(){
     console.log("queryGameClips");
     var activitiesCount = 1, activeActivities = _.map(activitiesMonitored);
-	function finish(){
+	function finish(activity){
 		//console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
 		//console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
 		if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
@@ -230,11 +230,11 @@ function queryGameClips(){
 							});
 						}
 					}
-					finish();
+					finish(activity);
 				});        
 			}); 
 		} else {
-			finish();
+			finish(activity);
 		}
     }
     nextActivity();
