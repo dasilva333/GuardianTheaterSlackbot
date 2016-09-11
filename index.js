@@ -178,9 +178,9 @@ function queryGameClips(){
     function nextActivity(){
         var activity = activeActivities.pop();
 		//console.log("activity", activity)
+		var gamerTagCount = 0;
 		if ( activity && activity.gamerTags ){
-			activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);
-			var gamerTagCount = 0;
+			activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);			
 			//console.log(activity.activityId," found activity for ", activity.intersection);
 			if ( activity.gamerTags.length == 0 ){
 				console.log("weird activity", activity)
@@ -230,11 +230,11 @@ function queryGameClips(){
 							});
 						}
 					}
-					finish(activity);
+					finish(activity, gamerTagCount);
 				});        
 			}); 
 		} else {
-			finish(activity);
+			finish(activity, gamerTagCount);
 		}
     }
     nextActivity();
