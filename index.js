@@ -161,74 +161,81 @@ function queryActivityCarnage(){
 function queryGameClips(){
     console.log("queryGameClips");
     var activitiesCount = 1, activeActivities = _.map(activitiesMonitored);
+	function finish(){
+		//console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
+		//console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
+		if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
+			/* Check every 5 minutes instead of 10 to account for any timing mismatch */
+			console.log("waiting 5 minutes to check history again");
+			//delayedQueryHistory();
+		}
+		else if ( activity.gamerTags.length == gamerTagCount ){
+			activitiesCount++;
+			nextActivity();
+		}
+	}
 	//console.log("activeActivities", activeActivities)
     function nextActivity(){
         var activity = activeActivities.pop();
 		//console.log("activity", activity)
-		activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);
-        var gamerTagCount = 0;
-        //console.log(activity.activityId," found activity for ", activity.intersection);
-		if ( activity.gamerTags.length == 0 ){
-			console.log("weird activity", activity)
-		}
-        _.each(activity.gamerTags, function(gamerTag){
-			//console.log("gamerTag", gamerTag)
-            var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
-			console.log("guardianTheaterURL", guardianTheaterURL)
-            request(guardianTheaterURL, function (error, response, body) {
-                gamerTagCount++;
-				//console.log("gamerTagCount", gamerTagCount)
-                if (!error && response.statusCode == 200) {
-                    var clips = JSON.parse(body);
-                    if (clips.length){
-                        _.each(clips, function(clip){
-							if ( clipsNotified.indexOf(clip.gameClipId) == -1 ){
-								var clipUrl = "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + clip.gameClipId;
-								clipsNotified.push(clip.gameClipId);
-								fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
-								var description = 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName;
-                                var gameClipRecordAt = moment(clip.dateRecorded);
-                                gameClipLastRecorded = gameClipRecordAt;
-								slack.send({
-								  text: description,
-								  icon_url: "http://guardian.theater/public/images/travelereel.png",
-								  username: "GuardianTheaterBot",							  
-								  attachments: [
-									{
-									  title: "Watch Now",
-									  title_link: clipUrl,
-									  image_url: clip.thumbnails[0].uri,
-									  thumb_url: clip.thumbnails[1].uri,                                                                    
-									  fallback: description,
-									  color: 'good',
-									  fields: [
-										{ title: 'Recorded By', value: gamerTag, short: true },
-										{ title: 'In Activity', value: activity.intersection.join(", "), short: true },
-										{ title: 'Record At', value: gameClipRecordAt.format('MMMM Do, h:mm a'), short: true }
+		if ( activity && activity.gamerTags ){
+			activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);
+			var gamerTagCount = 0;
+			//console.log(activity.activityId," found activity for ", activity.intersection);
+			if ( activity.gamerTags.length == 0 ){
+				console.log("weird activity", activity)
+			}
+			_.each(activity.gamerTags, function(gamerTag){
+				//console.log("gamerTag", gamerTag)
+				var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
+				console.log("guardianTheaterURL", guardianTheaterURL)
+				request(guardianTheaterURL, function (error, response, body) {
+					gamerTagCount++;
+					//console.log("gamerTagCount", gamerTagCount)
+					if (!error && response.statusCode == 200) {
+						var clips = JSON.parse(body);
+						if (clips.length){
+							_.each(clips, function(clip){
+								if ( clipsNotified.indexOf(clip.gameClipId) == -1 ){
+									var clipUrl = "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + clip.gameClipId;
+									clipsNotified.push(clip.gameClipId);
+									fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
+									var description = 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName;
+									var gameClipRecordAt = moment(clip.dateRecorded);
+									gameClipLastRecorded = gameClipRecordAt;
+									slack.send({
+									  text: description,
+									  icon_url: "http://guardian.theater/public/images/travelereel.png",
+									  username: "GuardianTheaterBot",							  
+									  attachments: [
+										{
+										  title: "Watch Now",
+										  title_link: clipUrl,
+										  image_url: clip.thumbnails[0].uri,
+										  thumb_url: clip.thumbnails[1].uri,                                                                    
+										  fallback: description,
+										  color: 'good',
+										  fields: [
+											{ title: 'Recorded By', value: gamerTag, short: true },
+											{ title: 'In Activity', value: activity.intersection.join(", "), short: true },
+											{ title: 'Record At', value: gameClipRecordAt.format('MMMM Do, h:mm a'), short: true }
+										  ]
+										}
 									  ]
-									}
-								  ]
-								});
-								console.log("notification sent to slack for " + gamerTag);								
-							} else {
-								console.log("skipping video already notified")
-							}
-                        });
-                    }
-                }
-                //console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
-                //console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
-                if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
-                    /* Check every 5 minutes instead of 10 to account for any timing mismatch */
-                    console.log("waiting 5 minutes to check history again");
-                    //delayedQueryHistory();
-                }
-                else if ( activity.gamerTags.length == gamerTagCount ){
-                    activitiesCount++;
-                    nextActivity();
-                }
-            });        
-        }); 
+									});
+									console.log("notification sent to slack for " + gamerTag);								
+								} else {
+									console.log("skipping video already notified")
+								}
+							});
+						}
+					}
+					finish();
+				});        
+			}); 
+		} else {
+			finish();
+		}
     }
     nextActivity();
 }
