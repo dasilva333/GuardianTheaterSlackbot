@@ -161,7 +161,7 @@ function queryActivityCarnage(){
 function queryGameClips(){
     console.log("queryGameClips");
     var activitiesCount = 1, activeActivities = _.map(activitiesMonitored);
-	function finish(activity){
+	function finish(activity, gamerTagCount){
 		//console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
 		//console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
 		if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
