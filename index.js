@@ -6,6 +6,7 @@ var slack = require("slack-notify");
 var moment = require("moment");
 var destiny = require("destiny-client")("5cae9cdee67a42848025223b4e61f929");
 var express = require("express");
+var randomColor = require("randomcolor");
 /* Define Variables */
 var definitionsFile = "./definitions.js";
 var configFile = "config.json";
@@ -21,7 +22,18 @@ var gameClipLastRecorded;
 var config = JSON.parse(fs.readFileSync(configFile));
 var definitions = require(definitionsFile);
 
+function saveConfig(){
+    fs.writeFileSync(configFile, JSON.stringify(config, null, 4));
+}
 config.XboxGamerTags = _.map(config.XboxGamerTags, function(gt){ return gt.toLowerCase(); });
+if ( !_.has(config,'colors') ){
+    config.colors = {};
+}
+config.colors = _.fromPairs(_.map(config.XboxGamerTags, function(gamerTag){
+    var color = _.has(config.colors,gamerTag) ? config.colors[gamerTag] : randomColor({ luminosity: "bright", format: "hex" });
+    return [ gamerTag, color ];
+}));
+saveConfig();
 var accounts = [];
 var activitiesMonitored = {};
 var gamerTagsMonitored = [];
@@ -203,10 +215,11 @@ function queryGameClips(){
 									var description = 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName;
 									var gameClipRecordAt = moment(clip.dateRecorded);
 									gameClipLastRecorded = gameClipRecordAt;
+                                    var recordingColor = config.XboxGamerTags.indexOf(gamerTag.toLowerCase()) > -1 ? config.colors[gamerTag] : "#0041C2";
 									slack.send({
 									  text: description,
 									  icon_url: "http://guardian.theater/public/images/travelereel.png",
-									  username: "GuardianTheaterBot",							  
+									  username: "GuardianTheaterBot",
 									  attachments: [
 										{
 										  title: "Watch Now",
@@ -214,7 +227,7 @@ function queryGameClips(){
 										  image_url: clip.thumbnails[0].uri,
 										  thumb_url: clip.thumbnails[1].uri,                                                                    
 										  fallback: description,
-										  color: 'good',
+										  color: recordingColor,
 										  fields: [
 											{ title: 'Recorded By', value: gamerTag, short: true },
 											{ title: 'In Activity', value: activity.intersection.join(", "), short: true },
@@ -277,7 +290,7 @@ app.get('/addgamer/*', function (req, res) {
       } else {
           config.XboxGamerTags.push(gamertag);
           queryAccountsInfo();
-          fs.writeFileSync(configFile, JSON.stringify(config));
+          saveConfig();
           res.send("GuardianBot added " + gamertag + " to the list of monitored accounts; " + config.XboxGamerTags.join(", "));
       }     
   } else {
@@ -291,7 +304,7 @@ app.get('/removegamer/*', function (req, res) {
       var index = config.XboxGamerTags.indexOf(gamertag);
       if ( index > -1 ){
           config.XboxGamerTags.splice(index, 1)  
-          fs.writeFileSync(configFile, JSON.stringify(config, null, 4));
+          saveConfig();
           res.send("GuardianBot removed " + gamertag + " from the list of monitored accounts; " + config.XboxGamerTags.join(", "));
       } else {
         res.send(500);
