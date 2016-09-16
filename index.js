@@ -5,8 +5,8 @@ var request = require('request');
 var slack = require("slack-notify");
 var moment = require("moment");
 var destiny = require("destiny-client")("5cae9cdee67a42848025223b4e61f929");
-var express = require("express");
 var randomColor = require("randomcolor");
+var async = require("async");
 /* Define Variables */
 var definitionsFile = "./definitions.js";
 var configFile = "config.json";
@@ -16,7 +16,7 @@ var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActi
 /* 10 Minute Cache on Guardian.Theater data */
 var guardianTheaterTTL = 10;
 /* A delay factor of 1 means the end point will be queried at the same interval at the cache timer, 2 means twice as fast */
-var delayFactor = 1;
+var defaultDelayFactor = 3;
 /* Keep track of a timestamp that refers to when a clip was last recorded */
 var gameClipLastRecorded;
 var config = JSON.parse(fs.readFileSync(configFile));
@@ -43,277 +43,214 @@ if (fs.existsSync(notifiedFilePath)){
 }
 slack = slack(config.SlackWebhook);
 
-/* Define Functions */
-function queryAccountsInfo(cb){
-    console.log("queryAccountsInfo");
-    accounts = [];
-    _.each(config.XboxGamerTags, function(gamerTag){
-        destiny
-          .Search({
-            membershipType: 1,
-            name: gamerTag
-          })
-          .then(function(users){
-            if (users.length == 1){
-                var account = _.first(users);
+var tasks = {
+    queryAccountsInfo: function(next){
+        async.map(config.XboxGamerTags, function(gamerTag, callback){
+            destiny
+              .Search({
+                membershipType: 1,
+                name: gamerTag
+              })
+              .then(function(users){
+                if (users.length == 1){
+                    var account = _.first(users);
+                    destiny
+                        .Account({
+                            membershipType: 1,
+                            membershipId: account.membershipId
+                        })
+                        .then(res => { 
+                            account.characters = _.map(res.characters, function(c){
+                                return c.characterBase.characterId;
+                            });
+                            callback(null, account);
+                        })
+                        .catch(function(e){
+                            callback(e, null);
+                        });
+                } else {
+                    callback("invalid account", null);
+                }
+            })
+            .catch(function(e){
+                callback(e, null);
+            });
+        }, function(err, results){
+            console.log("finished running all accounts");
+            next(err, results);
+        });
+    },
+    queryActivityHistory: [ 'queryAccountsInfo', function(results, next){
+        //console.log("accounts", accounts);
+        async.concat(results.queryAccountsInfo, function(account, nextAccount){
+            //console.log("account", account);
+            async.concat(account.characters, function(characterId, nextCharacter){
+                //console.log("characterId", characterId);
+                /* This query provides all the activityIds within a given time frame */
+                //console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
+                var activities = [];
                 destiny
-                    .Account({
-                        membershipType: 1,
-                        membershipId: account.membershipId
+                    .ActivityHistory({
+                        membershipType: account.membershipType,
+                        membershipId: account.membershipId,
+                        characterId: characterId,
+                        mode: "None"
                     })
                     .then(res => { 
-                        account.characters = _.map(res.characters, function(c){
-                            return c.characterBase.characterId;
+                        //count++;
+                        //console.log("activityhistory", count);
+                        /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
+                        //console.log("res.activities", res.activities);
+                        _.each(_.filter(res.activities, function(activity){
+                            var diffMins = moment().diff(moment(activity.period),'minutes');
+                            return diffMins <= 20;
+                        }), function(activity){
+                            var activityId = activity.activityDetails.instanceId;
+                            activities.push({
+                                activityId: activityId,
+                                mapId: activity.activityDetails.referenceId,
+                                gamerTags: []
+                            });
                         });
-                        accounts.push(account);
-                        if ( config.XboxGamerTags.length == accounts.length ){ if (cb) cb(); }
+                        nextCharacter(null, activities);
                     })
-					.catch(function(){
-						console.log("error:", e);
-					});
-            } else {
-                console.log("Invalid Xbox Gamertag Provided", gamerTag);
-            }
-        })
-		.catch(function(){
-			console.log("error:", e);
-		});
-    });
-}
-
-function queryActivityHistory(){
-	var accountIndex = 0;
-	function getNextCharacterHistory(){
-		var count = 0;
-		var account = accounts[accountIndex];
-		accountIndex++;
-        _.each(account.characters, function(characterId){
-            /* This query provides all the activityIds within a given time frame */
-            //console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
-            destiny
-                .ActivityHistory({
-                    membershipType: account.membershipType,
-                    membershipId: account.membershipId,
-                    characterId: characterId,
-                    mode: "None"
-                })
-                .then(res => { 
-                    //count++;
-					//console.log("activityhistory", count);
-                    /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
-                    _.each(_.filter(res.activities, function(activity){
-						var diffMins = moment().diff(moment(activity.period),'minutes');
-                        return diffMins <= 20;
-                    }), function(activity){
-						var activityId = activity.activityDetails.instanceId;
-                        activitiesMonitored[activityId] = {
-							activityId: activityId,
-                            mapId: activity.activityDetails.referenceId,
-							gamerTags: []
-						};
-                    });                    
-					//console.log("activityhistory", characterId, count == account.characters.length);
-                    /*if ( count == account.characters.length ){
-                        carnageCount++;
-						console.log("carnageCount", carnageCount, accounts.length)
-                        if ( carnageCount == accounts.length ){
-							console.log("ready to run queryActivityCarnage")
-                            queryActivityCarnage();
-                        }                        
-                    }*/
-					if (accountIndex > accounts.length){
-						queryActivityCarnage();
-					} else {
-						getNextCharacterHistory();
-					}
-                })
-				.catch(function(){
-					console.log("error:", e);
-				});
-        });
-	}
-    console.log("queryActivityHistory");
-    //carnageCount = 0;
-	getNextCharacterHistory();
-}
-
-function queryActivityCarnage(){
-    //console.log("queryActivityCarnage");
-    if ( _.keys(activitiesMonitored).length == 0 ){
-        //console.log("no activities found, waiting...");
-        //delayedQueryHistory();
-    } else {
-        var activityCount = 0;
-		//console.log("activitiesMonitored", activitiesMonitored);
-         _.each(activitiesMonitored, function(activity){
-            /* This query provides the information as to who was playing in a given activityId */
+                    .catch(function(){
+                        nextCharacter(e, null);
+                    });
+            }, function(err, activities){
+                console.log(account.displayName, "activities found for", activities.length);
+                nextAccount(err, activities);
+            });        
+        }, function(err, results){
+            /* remove duplicae activities where buddies played together */
+            var activities = _.uniqBy(results, function(activity){
+                return activity.activityId + " " + activity.mapId;
+            });
+            console.log("finished running all activities", activities.length);
+            next(err, activities);
+        });        
+    } ],
+    queryActivityCarnage: [ 'queryAccountsInfo', 'queryActivityHistory', function(results, next){
+        var activities = results.queryActivityHistory;
+        async.map(activities, function(activity, nextActivity){
             destiny
                 .CarnageReport({
                     activityId: activity.activityId
                 })
                 .then(res => {
-                    activityCount++;
                     activity.gamerTags = _.map(res.entries, function(e){
                         return e.player.destinyUserInfo.displayName;
                     });
-                    if ( _.keys(activitiesMonitored).length == activityCount ){
-                        queryGameClips();
-                    }
+                    nextActivity(null, activity);
                 })
 				.catch(function(){
-					console.log("error:", e);
+					nextActivity(e, null);
 				});
-        });        
-    }
-}
-
-/* At this point we have an activity object, each object has an id for the activity and the gamerTags in the activity,
-   All that's left is to pass this info to Guardian.theater and figure out if any players recorded any clips for that activity 
-*/
-function queryGameClips(){
-    console.log("queryGameClips");
-    var activitiesCount = 1, activeActivities = _.map(activitiesMonitored);
-	function finish(activity, gamerTagCount){
-		//console.log("nextActivity", activity.gamerTags.length, gamerTagCount, activity.gamerTags.length == gamerTagCount);
-		//console.log("delayedQueryHistory", activitiesCount, _.keys(activitiesMonitored).length, activitiesCount == _.keys(activitiesMonitored).length);
-		if ( activitiesCount == _.keys(activitiesMonitored).length && activity.gamerTags.length == gamerTagCount ){
-			/* Check every 5 minutes instead of 10 to account for any timing mismatch */
-			console.log("waiting 5 minutes to check history again");
-			//delayedQueryHistory();
-		}
-		else if ( activity.gamerTags.length == gamerTagCount ){
-			activitiesCount++;
-			nextActivity();
-		}
-	}
-	//console.log("activeActivities", activeActivities)
-    function nextActivity(){
-        var activity = activeActivities.pop();
-		//console.log("activity", activity)
-		var gamerTagCount = 0;
-		if ( activity && activity.gamerTags ){
-			activity.intersection = _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags);			
-			//console.log(activity.activityId," found activity for ", activity.intersection);
-			if ( activity.gamerTags.length == 0 ){
-				console.log("weird activity", activity)
-			}
-			_.each(activity.gamerTags, function(gamerTag){
-				//console.log("gamerTag", gamerTag)
-				var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
-				console.log("guardianTheaterURL", guardianTheaterURL)
+        }, function(err, results){
+            console.log("finished running all pgcr reports", activities.length);
+            next(err, results);
+        });
+    } ],
+    queryGameClips: [ 'queryAccountsInfo', 'queryActivityHistory', 'queryActivityCarnage', function(results, next){
+        var activities = results.queryActivityCarnage;
+        
+		async.concat(activities, function(activity, nextActivity){
+            async.concat(activity.gamerTags, function(gamerTag, nextGT){
+                var notifications = [];
+                var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
 				request(guardianTheaterURL, function (error, response, body) {
-					gamerTagCount++;
-					//console.log("gamerTagCount", gamerTagCount)
 					if (!error && response.statusCode == 200) {
 						var clips = JSON.parse(body);
 						if (clips.length){
-							_.each(clips, function(clip){
-								if ( clipsNotified.indexOf(clip.gameClipId) == -1 ){
-									var clipUrl = "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + clip.gameClipId;
-									clipsNotified.push(clip.gameClipId);
-									fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
-									var description = 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName;
-									var gameClipRecordAt = moment(clip.dateRecorded);
-									gameClipLastRecorded = gameClipRecordAt;
-                                    var recordingColor = config.XboxGamerTags.indexOf(gamerTag.toLowerCase()) > -1 ? config.colors[gamerTag] : "#0041C2";
-									slack.send({
-									  text: description,
-									  icon_url: "http://guardian.theater/public/images/travelereel.png",
-									  username: "GuardianTheaterBot",
-									  attachments: [
-										{
-										  title: "Watch Now",
-										  title_link: clipUrl,
-										  image_url: clip.thumbnails[0].uri,
-										  thumb_url: clip.thumbnails[1].uri,                                                                    
-										  fallback: description,
-										  color: recordingColor,
-										  fields: [
-											{ title: 'Recorded By', value: gamerTag, short: true },
-											{ title: 'In Activity', value: activity.intersection.join(", "), short: true },
-											{ title: 'Record At', value: gameClipRecordAt.format('MMMM Do, h:mm a'), short: true }
-										  ]
-										}
-									  ]
-									});
-									console.log("notification sent to slack for " + gamerTag);								
-								} else {
-									console.log("skipping video already notified")
-								}
-							});
-						}
-					}
-					finish(activity, gamerTagCount);
-				});        
-			}); 
-		} else {
-			finish(activity, gamerTagCount);
-		}
+							var notifications = _.map(clips, function(clip){
+                                var id = clip.gameClipId;
+								if ( clipsNotified.indexOf(id) == -1 ){
+                                    return {
+                                        id: id,
+                                        url: "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + id,
+                                        description: 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName,
+                                        date: moment(clip.dateRecorded).format('MMMM Do, h:mm a'),
+                                        color: config.XboxGamerTags.indexOf(gamerTag.toLowerCase()) > -1 ? config.colors[gamerTag] : "#0041C2",
+                                        image: clip.thumbnails[0].uri,
+                                        thumb: clip.thumbnails[1].uri,
+                                        recordedBy: gamerTag,
+                                        inActivity: _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags),
+                                    };									
+                                }
+                            });
+                        }
+                    }
+                    nextGT(null, notifications);
+                });                 
+            }, function(err, results){
+                console.log("clips found for activity", results.length);
+                nextActivity(err, results);
+            });
+        }, function(err, results){
+            var clips = _.compact(results);
+            console.log("finished running all gameclips to notify", clips.length);
+            next(err, clips);
+        });
+    } ],
+    notifySlack: [ 'queryGameClips', function(results, next){
+        var notifications = results.queryGameClips;
+        console.log("notifications", notifications)
+        _.each(notifications, function(notification){
+            console.log("notification", notification)
+            slack.send({
+                text: notification.description,
+                icon_url: "http://guardian.theater/public/images/travelereel.png",
+                username: "GuardianTheaterBot",
+                attachments: [
+                {
+                    title: "Watch Now",
+                    title_link: notification.url,
+                    image_url: notification.image,
+                    thumb_url: notification.thumb,                                                                    
+                    fallback: notification.description,
+                    color: notification.color,
+                    fields: [
+                        { title: 'Recorded By', value: notification.recordedBy, short: true },
+                        { title: 'In Activity', value: notification.inActivity.join(", "), short: true },
+                        { title: 'Record At', value: notification.date, short: true }
+                    ]
+                }
+                ]
+            }, function(err){
+                if (!err){
+                    clipsNotified.push(notification.id);
+                    fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
+                }
+            });
+        });
+        next(null, []);
+    } ]
+};
+
+var concurrency = 10;
+
+async.forever(
+    function(next) {
+        // next is suitable for passing to things that need a callback(err [, whatever]);
+        // it will result in this function being called again.
+        console.log("starting GuardianTheaterBot server");        
+        async.auto(tasks, concurrency, function(err, results){
+            if ( err ) { return console.log("error", err); } 
+            if ( results.queryGameClips.length > 0 ){
+                delayFactor = 2
+            } else {
+                delayFactor = 1;
+            }
+            var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
+            console.log("tasks completed, waiting for ", delay, (delay / 60 / 1000), "minutes");
+            setTimeout(next, delay);
+        });
+    },
+    function(err) {
+        // if next is called with a value in its first parameter, it will appear
+        // in here as 'err', and execution will stop.
+        console.log("error", err);
     }
-    nextActivity();
-}
+);
 
-var monitorGameClips = function(){
-    /* The delay is set to half the cache time to ensure that the bot remains responsive and in sync during use and reverts back to full cache time wait during off time */
-	if ( gameClipLastRecorded && moment().diff(gameClipLastRecorded,'minutes') < 60 ){
-        delayFactor = 2
-    } else {
-        delayFactor = 1;
-    }
-    var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
-	console.log("waiting for delayedQueryHistory", delay, (delay / 60 / 1000), "minutes");	
-    setTimeout(function(){
-		console.log("next queryActivityHistory");
-		queryActivityHistory();
-        monitorGameClips();
-	}, delay);
-}
 
-/* start the monitoring process */
-queryAccountsInfo(function(){
-    monitorGameClips();
-    queryActivityHistory();
-});
-
-var app = express();
-
-app.get('/listgamers', function (req, res) {
-  res.send("GuardianBot is currently configured to monitor " + config.XboxGamerTags.join(", "));
-});
-
-app.get('/addgamer/*', function (req, res) {
-  var gamertag = req.params[0].toLowerCase();
-  if ( gamertag ){  
-      var index = config.XboxGamerTags.indexOf(gamertag);
-      if ( index > -1 ){
-          res.send("Gamer already part of the list; " + config.XboxGamerTags.join(", "));
-      } else {
-          config.XboxGamerTags.push(gamertag);
-          queryAccountsInfo();
-          saveConfig();
-          res.send("GuardianBot added " + gamertag + " to the list of monitored accounts; " + config.XboxGamerTags.join(", "));
-      }     
-  } else {
-    res.send(500);
-  }
-});
-
-app.get('/removegamer/*', function (req, res) {
-  var gamertag = req.params[0].toLowerCase();
-  if ( gamertag ){  
-      var index = config.XboxGamerTags.indexOf(gamertag);
-      if ( index > -1 ){
-          config.XboxGamerTags.splice(index, 1)  
-          saveConfig();
-          res.send("GuardianBot removed " + gamertag + " from the list of monitored accounts; " + config.XboxGamerTags.join(", "));
-      } else {
-        res.send(500);
-      }      
-  } else {
-    res.send(500);
-  }
-});
-
-app.listen(1337, function () {
-  console.log('GuardianTheaterBot Helper listening on port 1337!');
-});
