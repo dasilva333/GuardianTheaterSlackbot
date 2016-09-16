@@ -16,7 +16,7 @@ var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActi
 /* 10 Minute Cache on Guardian.Theater data */
 var guardianTheaterTTL = 10;
 /* A delay factor of 1 means the end point will be queried at the same interval at the cache timer, 2 means twice as fast */
-var defaultDelayFactor = 3;
+var defaultDelayFactor = 1;
 /* Keep track of a timestamp that refers to when a clip was last recorded */
 var gameClipLastRecorded;
 var config = JSON.parse(fs.readFileSync(configFile));
@@ -85,7 +85,6 @@ var tasks = {
         async.concat(results.queryAccountsInfo, function(account, nextAccount){
             //console.log("account", account);
             async.concat(account.characters, function(characterId, nextCharacter){
-                //console.log("characterId", characterId);
                 /* This query provides all the activityIds within a given time frame */
                 //console.log("checking history for " + account.displayName + "'s characterId: " + characterId);
                 var activities = [];
@@ -96,22 +95,20 @@ var tasks = {
                         characterId: characterId,
                         mode: "None"
                     })
-                    .then(res => { 
-                        //count++;
-                        //console.log("activityhistory", count);
-                        /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
-                        //console.log("res.activities", res.activities);
-                        _.each(_.filter(res.activities, function(activity){
-                            var diffMins = moment().diff(moment(activity.period),'minutes');
-                            return diffMins <= 20;
-                        }), function(activity){
+                    .then(res => {                        
+                        var newActivities = _.filter(_.map(res.activities, function(activity){                            
                             var activityId = activity.activityDetails.instanceId;
-                            activities.push({
+                            return {
                                 activityId: activityId,
                                 mapId: activity.activityDetails.referenceId,
+                                diffMins: moment().diff(moment(activity.period),'minutes'),
                                 gamerTags: []
-                            });
+                            };
+                        }), function(activity){
+                            /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
+                            return activity.diffMins <= 200;
                         });
+                        activities = activities.concat(newActivities);
                         nextCharacter(null, activities);
                     })
                     .catch(function(){
@@ -153,7 +150,6 @@ var tasks = {
     } ],
     queryGameClips: [ 'queryAccountsInfo', 'queryActivityHistory', 'queryActivityCarnage', function(results, next){
         var activities = results.queryActivityCarnage;
-        
 		async.concat(activities, function(activity, nextActivity){
             async.concat(activity.gamerTags, function(gamerTag, nextGT){
                 var notifications = [];
@@ -175,7 +171,7 @@ var tasks = {
                                         thumb: clip.thumbnails[1].uri,
                                         recordedBy: gamerTag,
                                         inActivity: _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags),
-                                    };									
+                                    };
                                 }
                             });
                         }
@@ -227,20 +223,23 @@ var tasks = {
     } ]
 };
 
-var concurrency = 10;
-
+var cycles = 0, delayFactor = defaultDelayFactor;
 async.forever(
     function(next) {
         // next is suitable for passing to things that need a callback(err [, whatever]);
         // it will result in this function being called again.
         console.log("starting GuardianTheaterBot server");        
-        async.auto(tasks, concurrency, function(err, results){
-            if ( err ) { return console.log("error", err); } 
+        async.auto(tasks, function(err, results){
+            if ( err ) { return console.log("error", err); }             
+            /* When a clip is detected, set the delay factor to 2x (every 5 mins) for 10 cycles, if no video is detected in 60 mins, defaultDelayFactor (1x 10 mins) will return */
             if ( results.queryGameClips.length > 0 ){
-                delayFactor = 2
-            } else {
-                delayFactor = 1;
+                cycles = 0;
+                delayFactor = 2;
+            }             
+            else if (cycles == 12){
+                delayFactor = defaultDelayFactor;
             }
+            cycles++;
             var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
             console.log("tasks completed, waiting for ", delay, (delay / 60 / 1000), "minutes");
             setTimeout(next, delay);
