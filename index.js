@@ -106,7 +106,7 @@ var tasks = {
                             };
                         }), function(activity){
                             /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
-                            return activity.diffMins <= 200;
+                            return activity.diffMins <= 20;
                         });
                         activities = activities.concat(newActivities);
                         nextCharacter(null, activities);
@@ -158,7 +158,7 @@ var tasks = {
 					if (!error && response.statusCode == 200) {
 						var clips = JSON.parse(body);
 						if (clips.length){
-							var notifications = _.map(clips, function(clip){
+							notifications = _.map(clips, function(clip){
                                 var id = clip.gameClipId;
 								if ( clipsNotified.indexOf(id) == -1 ){
                                     return {
@@ -176,7 +176,7 @@ var tasks = {
                             });
                         }
                     }
-                    nextGT(null, notifications);
+                    nextGT(error, notifications);
                 });                 
             }, function(err, results){
                 console.log("clips found for activity", results.length);
