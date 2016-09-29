@@ -258,7 +258,7 @@ async.forever(
             var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
             console.log("tasks completed, waiting for ", delay, "ms (", (delay / 60 / 1000), " minutes)");
             setTimeout(function(){
-                next("next:" + err);
+                next(addErrorSource("next:",err));
             }, delay);
         });
     },
