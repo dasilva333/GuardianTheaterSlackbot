@@ -43,6 +43,13 @@ if (fs.existsSync(notifiedFilePath)){
 }
 slack = slack(config.SlackWebhook);
 
+var addErrorSource = function(source, error){
+    if ( error ){
+        error = source + ": " + error.toString();
+    }
+    return error;
+};
+
 var tasks = {
     queryAccountsInfo: function(next){
         async.map(config.XboxGamerTags, function(gamerTag, callback){
@@ -66,18 +73,18 @@ var tasks = {
                             callback(null, account);
                         })
                         .catch(function(e){
-                            callback(e, null);
+                            callback(addErrorSource("Account",e), null);
                         });
                 } else {
-                    callback("invalid account", null);
+                    callback("users.length, invalid account", null);
                 }
             })
             .catch(function(e){
-                callback(e, null);
+                callback(addErrorSource("Search:",e), null);
             });
         }, function(err, results){
             console.log("finished running all accounts");
-            next(err, results);
+            next(addErrorSource("async.map(config.XboxGamerTags",err), results);
         });
     },
     queryActivityHistory: [ 'queryAccountsInfo', function(results, next){
@@ -95,28 +102,32 @@ var tasks = {
                         characterId: characterId,
                         mode: "None"
                     })
-                    .then(res => {                        
-                        var newActivities = _.filter(_.map(res.activities, function(activity){                            
-                            var activityId = activity.activityDetails.instanceId;
-                            return {
-                                activityId: activityId,
-                                mapId: activity.activityDetails.referenceId,
-                                diffMins: moment().diff(moment(activity.period),'minutes'),
-                                gamerTags: []
-                            };
-                        }), function(activity){
-                            /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
-                            return activity.diffMins <= 20;
-                        });
-                        activities = activities.concat(newActivities);
-                        nextCharacter(null, activities);
+                    .then(res => {
+                        if ( _.isObject(res) ){
+                            var newActivities = _.filter(_.map(res.activities, function(activity){                            
+                                var activityId = activity.activityDetails.instanceId;
+                                return {
+                                    activityId: activityId,
+                                    mapId: activity.activityDetails.referenceId,
+                                    diffMins: moment().diff(moment(activity.period),'minutes'),
+                                    gamerTags: []
+                                };
+                            }), function(activity){
+                                /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
+                                return activity.diffMins <= 20;
+                            });
+                            activities = activities.concat(newActivities);
+                            nextCharacter(null, activities);                        
+                        } else {
+                            nextCharacter(addErrorSource("_.isObject(res) ",res), activities);
+                        }
                     })
-                    .catch(function(){
-                        nextCharacter(e, null);
+                    .catch(function(e){
+                        nextCharacter(addErrorSource("ActivityHistory",e), null);
                     });
             }, function(err, activities){
                 console.log(account.displayName, "activities found for", activities.length);
-                nextAccount(err, activities);
+                nextAccount(addErrorSource("async.concat(account.characters",err), activities);
             });        
         }, function(err, results){
             /* remove duplicae activities where buddies played together */
@@ -124,7 +135,7 @@ var tasks = {
                 return activity.activityId + " " + activity.mapId;
             });
             console.log("finished running all activities", activities.length);
-            next(err, activities);
+            next(addErrorSource("queryActivityHistory",err), activities);
         });        
     } ],
     queryActivityCarnage: [ 'queryAccountsInfo', 'queryActivityHistory', function(results, next){
@@ -140,12 +151,12 @@ var tasks = {
                     });
                     nextActivity(null, activity);
                 })
-				.catch(function(){
-					nextActivity(e, null);
+				.catch(function(e){
+					nextActivity(addErrorSource("CarnageReport",e), null);
 				});
         }, function(err, results){
             console.log("finished running all pgcr reports", activities.length);
-            next(err, results);
+            next(addErrorSource("queryActivityCarnage",err), results);
         });
     } ],
     queryGameClips: [ 'queryAccountsInfo', 'queryActivityHistory', 'queryActivityCarnage', function(results, next){
@@ -156,7 +167,12 @@ var tasks = {
                 var guardianTheaterURL = guardianTheaterApiEndpoint + gamerTag + "/" + activity.activityId;
 				request(guardianTheaterURL, function (error, response, body) {
 					if (!error && response.statusCode == 200) {
-						var clips = JSON.parse(body);
+                        var clips = [];
+                        try {
+                            clips = JSON.parse(body);
+                        } catch(e){
+                            return nextGT("JSON.parse" + e, notifications);
+                        }						
 						if (clips.length){
 							notifications = _.map(clips, function(clip){
                                 var id = clip.gameClipId;
@@ -176,16 +192,16 @@ var tasks = {
                             });
                         }
                     }
-                    nextGT(error, notifications);
+                    nextGT(addErrorSource("request(guardianTheaterURL",error), notifications);
                 });                 
             }, function(err, results){
                 console.log("clips found for activity", results.length);
-                nextActivity(err, results);
+                nextActivity(addErrorSource("activity.gamerTags",err), results);
             });
         }, function(err, results){
             var clips = _.compact(results);
             console.log("finished running all gameclips to notify", clips.length);
-            next(err, clips);
+            next(addErrorSource("async.concat(activities",err), clips);
         });
     } ],
     notifySlack: [ 'queryGameClips', function(results, next){
@@ -229,8 +245,7 @@ async.forever(
         // next is suitable for passing to things that need a callback(err [, whatever]);
         // it will result in this function being called again.
         console.log("starting GuardianTheaterBot server");        
-        async.auto(tasks, function(err, results){
-            if ( err ) { return console.log("error", err); }             
+        async.auto(tasks, function(err, results){     
             /* When a clip is detected, set the delay factor to 2x (every 5 mins) for 10 cycles, if no video is detected in 60 mins, defaultDelayFactor (1x 10 mins) will return */
             if ( results.queryGameClips.length > 0 ){
                 cycles = 0;
@@ -241,14 +256,16 @@ async.forever(
             }
             cycles++;
             var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
-            console.log("tasks completed, waiting for ", delay, (delay / 60 / 1000), "minutes");
-            setTimeout(next, delay);
+            console.log("tasks completed, waiting for ", delay, "ms (", (delay / 60 / 1000), " minutes)");
+            setTimeout(function(){
+                next("next:" + err);
+            }, delay);
         });
     },
     function(err) {
         // if next is called with a value in its first parameter, it will appear
         // in here as 'err', and execution will stop.
-        console.log("error", err);
+        console.log("async.forever:", err);
     }
 );
 
