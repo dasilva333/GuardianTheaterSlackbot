@@ -114,7 +114,7 @@ var tasks = {
                                 };
                             }), function(activity){
                                 /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
-                                return activity.diffMins <= 20 && activity.activityDetails.referenceId != "";
+                                return activity.diffMins <= 20 && activity.mapId > 0;
                             });
                             activities = activities.concat(newActivities);
                             nextCharacter(null, activities);                        
@@ -177,8 +177,9 @@ var tasks = {
 							notifications = _.map(clips, function(clip){
                                 var id = clip.gameClipId;
 								if ( clipsNotified.indexOf(id) == -1 ){
+                                    var notif = {};
                                     try {
-                                        return {
+                                        notif = {
                                             id: id,
                                             url: "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + id,
                                             description: 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName,
@@ -191,8 +192,8 @@ var tasks = {
                                         };
                                     } catch(e){
                                         console.log("clipsNotified.indexOf", e, activity);
-                                        return {};
-                                    }                                   
+                                    }
+                                    return notif;
                                 }
                             });
                         }
