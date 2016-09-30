@@ -114,7 +114,7 @@ var tasks = {
                                 };
                             }), function(activity){
                                 /* Eligble activities are defined as any match played in the last 20 minutes of current activity */
-                                return activity.diffMins <= 20;
+                                return activity.diffMins <= 20 && activity.activityDetails.referenceId != "";
                             });
                             activities = activities.concat(newActivities);
                             nextCharacter(null, activities);                        
@@ -177,17 +177,22 @@ var tasks = {
 							notifications = _.map(clips, function(clip){
                                 var id = clip.gameClipId;
 								if ( clipsNotified.indexOf(id) == -1 ){
-                                    return {
-                                        id: id,
-                                        url: "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + id,
-                                        description: 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName,
-                                        date: moment(clip.dateRecorded).format('MMMM Do, h:mm a'),
-                                        color: config.XboxGamerTags.indexOf(gamerTag.toLowerCase()) > -1 ? config.colors[gamerTag] : "#0041C2",
-                                        image: clip.thumbnails[0].uri,
-                                        thumb: clip.thumbnails[1].uri,
-                                        recordedBy: gamerTag,
-                                        inActivity: _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags),
-                                    };
+                                    try {
+                                        return {
+                                            id: id,
+                                            url: "http://guardian.theater/gamertag/"+ gamerTag + "/clip/" + id,
+                                            description: 'Game recording by ' + gamerTag + ' at ' + definitions[activity.mapId].activityName,
+                                            date: moment(clip.dateRecorded).format('MMMM Do, h:mm a'),
+                                            color: config.XboxGamerTags.indexOf(gamerTag.toLowerCase()) > -1 ? config.colors[gamerTag] : "#0041C2",
+                                            image: clip.thumbnails[0].uri,
+                                            thumb: clip.thumbnails[1].uri,
+                                            recordedBy: gamerTag,
+                                            inActivity: _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags),
+                                        };
+                                    } catch(e){
+                                        console.log("clipsNotified.indexOf", e, activity);
+                                        return {};
+                                    }                                   
                                 }
                             });
                         }
