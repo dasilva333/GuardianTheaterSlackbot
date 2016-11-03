@@ -15,7 +15,7 @@ var notifiedFilePath = "notified.json";
 var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActivity/";
 /* 10 Minute Cache on Guardian.Theater data */
 var guardianTheaterTTL = 10;
-/* A delay factor of 1 means the end point will be queried at the same interval at the cache timer, 2 means twice as fast */
+/* A delay factor of 1 means the end point will be queried at the same interval as the cache timer, 2 means twice as fast */
 var defaultDelayFactor = 1;
 /* Keep track of a timestamp that refers to when a clip was last recorded */
 var gameClipLastRecorded;
@@ -76,7 +76,7 @@ var tasks = {
                             callback(addErrorSource("Account",e), null);
                         });
                 } else {
-                    callback("users.length, invalid account", null);
+                    callback("users.length, invalid account " + gamerTag, null);
                 }
             })
             .catch(function(e){
@@ -251,7 +251,8 @@ async.forever(
         // next is suitable for passing to things that need a callback(err [, whatever]);
         // it will result in this function being called again.
         console.log("starting GuardianTheaterBot server");        
-        async.auto(tasks, function(err, results){     
+        async.auto(tasks, function(err, results){
+            if ( err ){ console.log("error running tasks", err); next(addErrorSource("next:",err)); }
             /* When a clip is detected, set the delay factor to 2x (every 5 mins) for 10 cycles, if no video is detected in 60 mins, defaultDelayFactor (1x 10 mins) will return */
             if ( results.queryGameClips.length > 0 ){
                 cycles = 0;
@@ -262,7 +263,7 @@ async.forever(
             }
             cycles++;
             var delay = (guardianTheaterTTL / delayFactor) * 60 * 1000;
-            console.log("tasks completed, waiting for ", delay, "ms (", (delay / 60 / 1000), " minutes)");
+            console.log("tasks completed, waiting for ", delay, "ms (", (delay / 60 / 1000), " minutes )");
             setTimeout(function(){
                 next(addErrorSource("next:",err));
             }, delay);
@@ -274,5 +275,3 @@ async.forever(
         console.log("async.forever:", err);
     }
 );
-
-
