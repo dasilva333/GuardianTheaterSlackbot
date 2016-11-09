@@ -15,7 +15,7 @@ var notifiedFilePath = "notified.json";
 var guardianTheaterApiEndpoint = "http://guardian.theater/api/GetClipsPlayerActivity/";
 /* 10 Minute Cache on Guardian.Theater data */
 var guardianTheaterTTL = 10;
-/* A delay factor of 1 means the end point will be queried at the same interval as the cache timer, 2 means twice as fast */
+/* A delay factor of 1 means the end point will be queried at the same interval at the cache timer, 2 means twice as fast */
 var defaultDelayFactor = 1;
 /* Keep track of a timestamp that refers to when a clip was last recorded */
 var gameClipLastRecorded;
@@ -188,10 +188,11 @@ var tasks = {
                                             image: clip.thumbnails[0].uri,
                                             thumb: clip.thumbnails[1].uri,
                                             recordedBy: gamerTag,
-                                            inActivity: _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags),
+                                            inActivity: _.intersection(_.map(activity.gamerTags, function(r){ return r.toLowerCase(); }), config.XboxGamerTags)
                                         };
                                     } catch(e){
                                         console.log("clipsNotified.indexOf", e, activity);
+                                        notif.error = e;
                                     }
                                     return notif;
                                 }
@@ -215,31 +216,33 @@ var tasks = {
         console.log("notifications", notifications)
         _.each(notifications, function(notification){
             console.log("notification", notification)
-            slack.send({
-                text: notification.description,
-                icon_url: "http://guardian.theater/public/images/travelereel.png",
-                username: "GuardianTheaterBot",
-                attachments: [
-                {
-                    title: "Watch Now",
-                    title_link: notification.url,
-                    image_url: notification.image,
-                    thumb_url: notification.thumb,                                                                    
-                    fallback: notification.description,
-                    color: notification.color,
-                    fields: [
-                        { title: 'Recorded By', value: notification.recordedBy, short: true },
-                        { title: 'In Activity', value: notification.inActivity.join(", "), short: true },
-                        { title: 'Record At', value: notification.date, short: true }
+            if ( notification && notification.date ){
+                slack.send({
+                    text: notification.description,
+                    icon_url: "http://guardian.theater/public/images/travelereel.png",
+                    username: "GuardianTheaterBot",
+                    attachments: [
+                    {
+                        title: "Watch Now",
+                        title_link: notification.url,
+                        image_url: notification.image,
+                        thumb_url: notification.thumb,                                                                    
+                        fallback: notification.description,
+                        color: notification.color,
+                        fields: [
+                            { title: 'Recorded By', value: notification.recordedBy, short: true },
+                            { title: 'In Activity', value: notification.inActivity.join(", "), short: true },
+                            { title: 'Record At', value: notification.date, short: true }
+                        ]
+                    }
                     ]
-                }
-                ]
-            }, function(err){
-                if (!err){
-                    clipsNotified.push(notification.id);
-                    fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
-                }
-            });
+                }, function(err){
+                    if (!err){
+                        clipsNotified.push(notification.id);
+                        fs.writeFileSync(notifiedFilePath, JSON.stringify(clipsNotified));
+                    }
+                });
+            }          
         });
         next(null, []);
     } ]
