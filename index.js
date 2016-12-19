@@ -123,7 +123,8 @@ var tasks = {
                         }
                     })
                     .catch(function(e){
-                        nextCharacter(addErrorSource("ActivityHistory",e), null);
+                        console.log("Error Parsing ActivityHistory", e);
+                        nextCharacter(null, activities);
                     });
             }, function(err, activities){
                 console.log(account.displayName, "activities found for", activities.length);
